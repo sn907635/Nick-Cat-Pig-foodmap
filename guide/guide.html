@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>私人美食地圖｜建置流程、重點與維護說明</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .step-checkbox:checked + label .step-text {
+      text-decoration: line-through;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+  <!-- 頂部導航列 -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-amber-500 text-white p-2 rounded-lg shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+        </div>
+        <div>
+          <span class="text-base sm:text-lg font-bold text-slate-900 tracking-tight block leading-tight">私人美食地圖｜系統操作與部署指南</span>
+          <span class="text-xs text-slate-500 hidden sm:block">Google 試算表 + Leaflet.js + GitHub Pages 輕量化架構</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <a href="./index.html" class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          前往美食地圖
+        </a>
+        <a href="https://github.com/sn907635/Nick-Cat-Pig-foodmap" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-medium px-3 py-2 rounded-lg transition">
+          GitHub 儲存庫
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主容器：左側目錄 + 右側內容 -->
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col lg:flex-row gap-8">
+
+    <!-- 左側快速導覽 (桌面版固定) -->
+    <aside class="lg:w-64 shrink-0">
+      <div class="lg:sticky lg:top-24 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+        <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 px-2">文件目錄</div>
+        <nav class="space-y-1 text-sm">
+          <a href="#overview" class="block px-3 py-2 rounded-lg font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition">一、系統架構與運作原理</a>
+          <a href="#workflow" class="block px-3 py-2 rounded-lg font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition">二、四步驟完整建置流程</a>
+          <a href="#schema" class="block px-3 py-2 rounded-lg font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition">三、試算表欄位與維護規範</a>
+          <a href="#keypoints" class="block px-3 py-2 rounded-lg font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition">四、核心設計重點</a>
+          <a href="#precautions" class="block px-3 py-2 rounded-lg font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700 transition">五、注意事項與常見排錯</a>
+        </nav>
+
+        <div class="mt-5 pt-4 border-t border-slate-100 px-2">
+          <div class="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+            <span>部署檢核進度</span>
+            <span id="progressText" class="font-semibold text-amber-600">0 / 6</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div id="progressBar" class="bg-amber-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <button type="button" id="resetChecklistBtn" class="mt-2.5 text-xs text-slate-400 hover:text-slate-600 underline cursor-pointer">
+            重設檢核狀態
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 右側主要說明文件 -->
+    <main class="flex-1 space-y-10 min-w-0">
+
+      <!-- 一、系統架構與運作原理 -->
+      <section id="overview" class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm scroll-mt-24">
+        <div class="inline-flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full mb-3">
+          架構總覽
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">私人美食地圖建置與維護說明</h1>
+        <p class="mt-3 text-slate-600 leading-relaxed">
+          本系統採用<strong>「無伺服器純前端架構」</strong>，以 Google 試算表作為後台資料庫，前端透過瀏覽器即時解析 CSV 資料並結合 OpenStreetMap 互動地圖渲染。建置完成後，日常新增或修改餐廳僅需編輯試算表，無需更動任何程式碼。
+        </p>
+
+        <!-- 資料流向圖示卡片 -->
+        <div class="mt-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div class="text-xs font-bold text-amber-600 mb-1">1. 資料維護端</div>
+            <div class="font-bold text-slate-900 text-sm">Google 試算表</div>
+            <p class="text-xs text-slate-500 mt-1">維護餐廳資料與動態下拉選單，並發布為公開 CSV。</p>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div class="text-xs font-bold text-amber-600 mb-1">2. 資料解析層</div>
+            <div class="font-bold text-slate-900 text-sm">PapaParse 引擎</div>
+            <p class="text-xs text-slate-500 mt-1">於使用者瀏覽器端抓取 CSV 並轉換為結構化 JSON 物件。</p>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div class="text-xs font-bold text-amber-600 mb-1">3. 地圖與介面層</div>
+            <div class="font-bold text-slate-900 text-sm">Leaflet.js + Tailwind</div>
+            <p class="text-xs text-slate-500 mt-1">渲染多條件篩選器、餐廳卡片清單與互動地圖圖釘。</p>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div class="text-xs font-bold text-amber-600 mb-1">4. 網站託管層</div>
+            <div class="font-bold text-slate-900 text-sm">GitHub Pages</div>
+            <p class="text-xs text-slate-500 mt-1">提供免費 HTTPS 靜態網頁空間與跨裝置存取網址。</p>
+          </div>
+        </div>
+
+        <div class="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm">
+          <div>
+            <span class="text-slate-500">正式網站網址：</span>
+            <a href="https://sn907635.github.io/Nick-Cat-Pig-foodmap/" target="_blank" rel="noopener noreferrer" class="font-mono text-amber-700 font-semibold hover:underline break-all">
+              https://sn907635.github.io/Nick-Cat-Pig-foodmap/
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- 二、四步驟完整建置流程 -->
+      <section id="workflow" class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm scroll-mt-24">
+        <div class="inline-flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full mb-3">
+          標準作業程序 (SOP)
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-slate-900">二、四步驟完整建置與發布流程</h2>
+        <p class="mt-2 text-sm text-slate-600">可勾選下方各步驟的檢核方塊追蹤設定進度（狀態會自動儲存於目前瀏覽器）。</p>
+
+        <div class="mt-6 space-y-6">
+
+          <!-- Step 1 -->
+          <div class="border border-slate-200 rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-sm flex items-center justify-center shrink-0 mt-0.5">1</span>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-base font-bold text-slate-900">建立 Google 試算表與動態下拉選單</h3>
+                <p class="text-sm text-slate-600 mt-1">
+                  在試算表中建立兩個工作表：<strong>「美食清單」</strong>（必須放在第一個分頁位置）與<strong>「選項維護」</strong>。透過「資料驗證」將地區、類型、餐廳分類綁定至「選項維護」對應欄位，實現集中維護選單項目。
+                </p>
+                <div class="mt-3 flex items-center gap-2">
+                  <input type="checkbox" id="chk_step1" class="step-checkbox w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                  <label for="chk_step1" class="text-xs font-medium text-slate-700 cursor-pointer">
+                    <span class="step-text">已完成「美食清單」與「選項維護」工作表建置</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="border border-slate-200 rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-sm flex items-center justify-center shrink-0 mt-0.5">2</span>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-base font-bold text-slate-900">將試算表發布為 CSV 公開連結</h3>
+                <ol class="mt-2 space-y-1.5 text-sm text-slate-600 list-decimal list-inside">
+                  <li>開啟「私人美食地圖資料庫」試算表，點選左上角 <strong>「檔案」 &gt; 「共用」 &gt; 「發布到網路」</strong>（注意：繁體中文介面名稱為「共用」而非「分享」）。</li>
+                  <li>在「連結」分頁中，第一個下拉選單指定選擇 <strong>「美食清單」</strong>，第二個下拉選單選擇 <strong>「逗號分隔值 (.csv)」</strong>。</li>
+                  <li>點擊 <strong>「發布」</strong> 並確認，複製產生的 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono text-slate-800">https://docs.google.com/spreadsheets/d/e/.../pub?output=csv</code> 網址。</li>
+                </ol>
+                <div class="mt-3 flex items-center gap-2">
+                  <input type="checkbox" id="chk_step2" class="step-checkbox w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                  <label for="chk_step2" class="text-xs font-medium text-slate-700 cursor-pointer">
+                    <span class="step-text">已取得「美食清單」的 pub?output=csv 發布網址</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="border border-slate-200 rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-sm flex items-center justify-center shrink-0 mt-0.5">3</span>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-base font-bold text-slate-900">將 CSV 網址填入網頁設定區（index.html）</h3>
+                <p class="text-sm text-slate-600 mt-1">
+                  開啟 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">index.html</code>，找到程式碼下方的 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">CONFIG</code> 區塊，將複製的 CSV 網址貼入 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">SHEET_CSV_URL</code> 單引號內並存檔：
+                </p>
+                <div class="mt-3 relative bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">
+                  <button type="button" onclick="copyCode('codeConfig', this)" class="absolute top-3 right-3 bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1 rounded text-xs font-sans transition cursor-pointer">
+                    複製程式碼
+                  </button>
+                  <pre id="codeConfig" class="leading-relaxed">const CONFIG = {
+  SHEET_CSV_URL: 'https://docs.google.com/spreadsheets/d/e/你的發布ID/pub?output=csv',
+  DEFAULT_CENTER: [24.1512, 120.6815],
+  DEFAULT_ZOOM: 13
+};</pre>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                  <input type="checkbox" id="chk_step3" class="step-checkbox w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                  <label for="chk_step3" class="text-xs font-medium text-slate-700 cursor-pointer">
+                    <span class="step-text">已填入 CSV 網址並於本機雙擊開啟 index.html 測試成功</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="border border-slate-200 rounded-xl p-5">
+            <div class="flex items-start gap-3">
+              <span class="w-7 h-7 rounded-full bg-amber-500 text-white font-bold text-sm flex items-center justify-center shrink-0 mt-0.5">4</span>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-base font-bold text-slate-900">上傳至 GitHub 並啟用 GitHub Pages</h3>
+                <div class="mt-2 space-y-2 text-sm text-slate-600">
+                  <p><strong>1. 上傳檔案至儲存庫根目錄：</strong>將 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">index.html</code>（以及本說明檔 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">guide.html</code>）透過網頁拖曳或以下 Git 指令推送至 <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">main</code> 分支：</p>
+                  <div class="relative bg-slate-900 text-slate-100 rounded-xl p-4 text-xs font-mono overflow-x-auto">
+                    <button type="button" onclick="copyCode('codeGit', this)" class="absolute top-3 right-3 bg-slate-700 hover:bg-slate-600 text-slate-200 px-2.5 py-1 rounded text-xs font-sans transition cursor-pointer">
+                      複製指令
+                    </button>
+                    <pre id="codeGit" class="leading-relaxed">git init
+git add index.html guide.html
+git commit -m "Deploy food map and guide pages"
+git branch -M main
+git remote add origin https://github.com/sn907635/Nick-Cat-Pig-foodmap.git
+git push -u origin main</pre>
+                  </div>
+                  <p class="pt-1"><strong>2. 開啟 Pages 網站託管：</strong>前往專案的 <a href="https://github.com/sn907635/Nick-Cat-Pig-foodmap/settings/pages" target="_blank" rel="noopener noreferrer" class="text-amber-700 font-semibold underline">Settings &gt; Pages</a>，確認儲存庫為 <strong>Public</strong>，在 Build and deployment 區塊將 Branch 設為 <strong>main</strong>、資料夾維持 <strong>/ (root)</strong> 後點擊 <strong>Save</strong>。等待約 1 至 2 分鐘即可透過正式網址存取。</p>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" id="chk_step4" class="step-checkbox w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                    <label for="chk_step4" class="text-xs font-medium text-slate-700 cursor-pointer">
+                      <span class="step-text">已將檔案推送至 GitHub 並完成 Settings &gt; Pages 設定</span>
+                    </label>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" id="chk_step5" class="step-checkbox w-4 h-4 accent-amber-500 rounded cursor-pointer" />
+                    <label for="chk_step5" class="text-xs font-medium text-slate-700 cursor-pointer">
+                      <span class="step-text">已使用手機開啟正式網址並設定「加入主畫面」捷徑</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 三、試算表欄位與維護規範 -->
+      <section id="schema" class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm scroll-mt-24">
+        <div class="inline-flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full mb-3">
+          資料庫結構 (Schema)
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-slate-900">三、Google 試算表欄位與維護規範</h2>
+        <p class="mt-2 text-sm text-slate-600">
+          「美食清單」工作表的第一列標題名稱必須與下方表格完全一致，網頁端程式才能正確對應欄位：
+        </p>
+
+        <div class="mt-5 overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="bg-slate-100 border-b border-slate-200 text-slate-700">
+                <th class="py-3 px-4 font-bold whitespace-nowrap">欄位名稱</th>
+                <th class="py-3 px-4 font-bold whitespace-nowrap">填寫要求</th>
+                <th class="py-3 px-4 font-bold whitespace-nowrap">標準格式與範例</th>
+                <th class="py-3 px-4 font-bold">系統解析與前端行為說明</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 text-slate-600">
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">地區</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded">必填</span></td>
+                <td class="py-3 px-4 font-mono text-xs whitespace-nowrap">台中市北區</td>
+                <td class="py-3 px-4">由「選項維護」A 欄動態生成下拉選單；前端自動彙整不重複地區作為篩選條件。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">名稱</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded">必填</span></td>
+                <td class="py-3 px-4 text-xs whitespace-nowrap">一中街濃厚豚骨拉麵</td>
+                <td class="py-3 px-4">卡片主標題與地圖圖釘標題；若此欄為空白，程式會自動忽略該列資料。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">類型</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded">必填</span></td>
+                <td class="py-3 px-4 text-xs whitespace-nowrap">日式料理</td>
+                <td class="py-3 px-4">定義為<strong>料理菜系</strong>（如台式、日式、義式），由「選項維護」B 欄提供下拉選單。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">餐廳分類</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded">必填</span></td>
+                <td class="py-3 px-4 text-xs whitespace-nowrap">正餐</td>
+                <td class="py-3 px-4">定義為<strong>用餐情境</strong>（如正餐、小吃、咖啡廳、聚餐），由「選項維護」C 欄提供下拉選單。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">評分</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded">選填</span></td>
+                <td class="py-3 px-4 font-mono text-xs whitespace-nowrap">4.6</td>
+                <td class="py-3 px-4">數值範圍限制 1.0 至 5.0（支援小數），用於最低評分過濾與高低排序。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">經緯度</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded">建議填寫</span></td>
+                <td class="py-3 px-4 font-mono text-xs whitespace-nowrap">24.1502, 120.6848</td>
+                <td class="py-3 px-4">緯度在前、經度在後，以半形逗號分隔。留空時仍會出現在左側清單，但地圖不顯示圖釘。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">地圖連結</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded">選填</span></td>
+                <td class="py-3 px-4 font-mono text-xs whitespace-nowrap">https://maps.app.goo.gl/...</td>
+                <td class="py-3 px-4">自訂 Google Maps 分享網址；若留空，網頁會自動以「店名 + 地區」組合搜尋導航連結。</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">備註</td>
+                <td class="py-3 px-4 whitespace-nowrap"><span class="bg-slate-100 text-slate-600 text-xs font-medium px-2 py-0.5 rounded">選填</span></td>
+                <td class="py-3 px-4 text-xs">叉燒厚實、尖峰需排隊</td>
+                <td class="py-3 px-4">可記錄必點菜色、低消或停車資訊，頂部關鍵字搜尋框會同步檢索此欄位。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 四、核心設計重點 -->
+      <section id="keypoints" class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm scroll-mt-24">
+        <div class="inline-flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full mb-3">
+          設計亮點
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-slate-900">四、核心設計重點</h2>
+
+        <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-sm">1. 零營運成本與無 API 計費風險</h3>
+            <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              捨棄需要綁定信用卡與流量計費的 Google Maps JavaScript API，改用開源的 Leaflet.js 搭配 OpenStreetMap 圖資呈現多點位地圖；實際導航則透過外部 URL 喚起使用者手機原生的 Google Maps App，兼顧視覺整合與零成本。
+            </p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-sm">2. 資料與程式完全解耦</h3>
+            <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              餐廳資料與分類選項全數儲存於 Google 試算表。日後無論在電腦或手機上透過試算表 App 新增餐廳、調整評分或擴充「選項維護」分類，網頁端皆會動態同步，完全不需要重新部署 GitHub Pages。
+            </p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-sm">3. 維度分離的雙層分類設計</h3>
+            <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              明確區分「類型（料理菜系，如日式、台式）」與「餐廳分類（用餐型態，如正餐、咖啡廳、聚餐）」，避免資料累積後標籤混亂，讓使用者能精準進行交叉篩選（例如：篩選「台中市北區」＋「日式料理」＋「4.5 分以上」）。
+            </p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-sm">4. 容錯機制與決策輔助</h3>
+            <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              若臨時建檔來不及查詢經緯度或地圖網址，系統具備自動容錯能力（自動產生 Google 搜尋導航連結、清單正常顯示並標註無座標）；此外內建「隨機抽一間」功能，可直接從當前篩選結果中抽選餐廳。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 五、注意事項與常見排錯 -->
+      <section id="precautions" class="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm scroll-mt-24">
+        <div class="inline-flex items-center gap-2 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full mb-3">
+          風險與排錯
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-slate-900">五、注意事項與常見問題排錯</h2>
+
+        <div class="mt-5 space-y-4">
+          <div class="border-l-4 border-amber-500 bg-amber-50/50 p-4 rounded-r-xl">
+            <h3 class="font-bold text-slate-900 text-sm">注意事項 1：Google 試算表更新有 1 至 5 分鐘快取延遲</h3>
+            <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+              Google 試算表的「發布到網路」機制在 Google 伺服器端設有快取機制。在試算表新增或修改餐廳後，若立即點擊網頁右上角的「同步資料」尚未看到最新資料，請稍候 1 至 5 分鐘再重新整理即可。
+            </p>
+          </div>
+
+          <div class="border-l-4 border-red-500 bg-red-50/50 p-4 rounded-r-xl">
+            <h3 class="font-bold text-slate-900 text-sm">注意事項 2：資料公開性與資訊安全邊界</h3>
+            <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+              免費版 GitHub Pages 必須使用 Public 公開儲存庫，且試算表需啟用「發布到網路」，代表任何取得網址或檢視網頁原始碼的人都能讀取該 CSV 內容。請務必確認試算表中<strong>僅存放餐廳公開資訊，切勿填入個人住家地址、電話、密碼或任何機密資料</strong>。
+            </p>
+          </div>
+
+          <div class="border-l-4 border-slate-600 bg-slate-50 p-4 rounded-r-xl">
+            <h3 class="font-bold text-slate-900 text-sm">注意事項 3：鎖定工作表順序與第一列標題名稱</h3>
+            <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+              「美食清單」必須維持在試算表底部的<strong>第一個分頁位置</strong>；同時請勿隨意修改第一列的 8 個欄位標題文字（地區、名稱、類型、餐廳分類、評分、經緯度、地圖連結、備註），否則前端解析器將無法正確對應欄位。
+            </p>
+          </div>
+
+          <div class="border-l-4 border-slate-600 bg-slate-50 p-4 rounded-r-xl">
+            <h3 class="font-bold text-slate-900 text-sm">注意事項 4：經緯度格式與取得技巧</h3>
+            <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+              經緯度欄位僅接受數字格式（例如 <code class="bg-white px-1 py-0.5 rounded border border-slate-200 font-mono">24.1502, 120.6848</code>），在電腦版 Google Maps 地圖紅點上按<strong>滑鼠右鍵</strong>，點擊第一行的經緯度數字即可自動複製。若貼入中文地址或經緯度順序顛倒，地圖圖釘將無法正確顯示。
+            </p>
+          </div>
+
+          <div class="border-l-4 border-slate-600 bg-slate-50 p-4 rounded-r-xl">
+            <h3 class="font-bold text-slate-900 text-sm">注意事項 5：GitHub Pages 顯示 404 Not Found 排錯</h3>
+            <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+              若開啟 GitHub Pages 網址出現 404 錯誤，請依序檢查：(1) 主網頁檔名是否為全小寫 <code class="bg-white px-1 py-0.5 rounded border border-slate-200 font-mono">index.html</code>；(2) GitHub 專案是否已設為 <strong>Public</strong>；(3) Settings &gt; Pages 中的 Branch 是否已從 None 切換為 <strong>main</strong> 並按下 Save。
+            </p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer class="border-t border-slate-200 bg-white mt-12 py-6 text-center text-xs text-slate-400">
+    私人美食地圖系統文件｜搭配 Google 試算表與 GitHub Pages 建置
+  </footer>
+
+  <script>
+    // 複製程式碼功能
+    function copyCode(elementId, btn) {
+      const text = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const originalText = btn.textContent;
+        btn.textContent = '已複製';
+        btn.classList.add('bg-amber-600', 'text-white');
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove('bg-amber-600', 'text-white');
+        }, 1500);
+      });
+    }
+
+    // 部署進度檢核表狀態儲存 (localStorage)
+    document.addEventListener('DOMContentLoaded', () => {
+      const checkboxes = document.querySelectorAll('.step-checkbox');
+      const progressText = document.getElementById('progressText');
+      const progressBar = document.getElementById('progressBar');
+      const storageKey = 'foodmap_guide_checklist_v1';
+
+      function updateProgress() {
+        const total = checkboxes.length;
+        const checked = [...checkboxes].filter(cb => cb.checked).length;
+        progressText.textContent = `${checked} / ${total}`;
+        progressBar.style.width = `${Math.round((checked / total) * 100)}%`;
+
+        const state = {};
+        checkboxes.forEach(cb => { state[cb.id] = cb.checked; });
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      }
+
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || '{}');
+        checkboxes.forEach(cb => {
+          if (saved[cb.id]) cb.checked = true;
+        });
+      } catch (e) {}
+
+      updateProgress();
+
+      checkboxes.forEach(cb => cb.addEventListener('change', updateProgress));
+
+      document.getElementById('resetChecklistBtn').addEventListener('click', () => {
+        checkboxes.forEach(cb => { cb.checked = false; });
+        localStorage.removeItem(storageKey);
+        updateProgress();
+      });
+    });
+  </script>
+</body>
+</html>
