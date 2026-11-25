@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>私人美食地圖</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet.js CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  
+  <!-- PapaParse CSV Parser -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" crossorigin=""></script>
+
+  <style>
+    /* 自訂捲軸與地圖容器高度 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    .leaflet-popup-content-wrapper { border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+    .leaflet-popup-content { margin: 12px 14px; line-height: 1.5; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 flex flex-col min-h-screen lg:h-screen lg:overflow-hidden">
+
+  <!-- 頂部導航列 -->
+  <header class="bg-white border-b border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 z-20">
+    <div class="flex items-center gap-3">
+      <div class="bg-amber-500 text-white p-2 rounded-lg">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 tracking-tight">美食口袋名單</h1>
+        <p id="dataSourceStatus" class="text-xs text-slate-500">資料載入中...</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button id="randomPickBtn" type="button" class="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow-sm transition cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        隨機抽一間
+      </button>
+      <button id="reloadBtn" type="button" title="重新載入試算表資料" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium px-3 py-2 rounded-lg transition cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+        <span class="hidden sm:inline">同步資料</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 多條件篩選列 -->
+  <section class="bg-white border-b border-slate-200 px-4 py-3 shrink-0 z-10 shadow-sm">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <!-- 關鍵字搜尋 -->
+      <div class="col-span-2 sm:col-span-3 lg:col-span-2 relative">
+        <input id="searchInput" type="text" placeholder="搜尋店名、備註或菜色..." class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white" />
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+
+      <!-- 地區篩選 -->
+      <select id="regionFilter" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+        <option value="">所有地區</option>
+      </select>
+
+      <!-- 類型篩選 (料理菜系) -->
+      <select id="typeFilter" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+        <option value="">所有類型</option>
+      </select>
+
+      <!-- 餐廳分類篩選 (用餐情境) -->
+      <select id="categoryFilter" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+        <option value="">所有分類</option>
+      </select>
+
+      <!-- 最低評分 & 重設 -->
+      <div class="col-span-2 sm:col-span-1 flex gap-2">
+        <select id="ratingFilter" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <option value="0">所有評分</option>
+          <option value="4.5">4.5 分以上</option>
+          <option value="4.0">4.0 分以上</option>
+          <option value="3.5">3.5 分以上</option>
+        </select>
+        <button id="resetFilterBtn" type="button" title="清除篩選條件" class="px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg shrink-0 transition cursor-pointer">
+          重設
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 主內容區：左側清單 + 右側地圖 -->
+  <main class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden">
+    
+    <!-- 地圖區塊 (手機版置頂方便單手操作，桌面版置右) -->
+    <div class="w-full h-[42vh] lg:h-full lg:w-7/12 lg:order-2 relative border-b lg:border-b-0 lg:border-l border-slate-200 shrink-0">
+      <div id="map" class="w-full h-full z-0"></div>
+    </div>
+
+    <!-- 餐廳清單區塊 -->
+    <div class="w-full lg:w-5/12 lg:order-1 flex flex-col lg:h-full bg-slate-50">
+      <div class="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600 shrink-0">
+        <span>符合條件：<strong id="resultCount" class="text-slate-900">0</strong> 間餐廳</span>
+        <select id="sortSelect" class="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer">
+          <option value="default">預設順序</option>
+          <option value="ratingDesc">評分由高到低</option>
+          <option value="ratingAsc">評分由低到高</option>
+        </select>
+      </div>
+
+      <div id="restaurantList" class="p-4 space-y-3 lg:overflow-y-auto flex-1">
+        <!-- 動態渲染卡片 -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 隨機抽籤結果彈窗 -->
+  <div id="randomModal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">今日推薦結果</span>
+        <button id="closeModalBtn" type="button" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div id="randomModalContent"></div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // [設定區] 請將下方引號內的網址替換為你的 Google 試算表「發布到網路 (CSV)」連結
+    // 若保持空白，系統將自動載入內建的範例資料供測試
+    // =========================================================================
+    const CONFIG = {
+      SHEET_CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSehl-po7yvrfpcbb59rbtOOpqIV-6WRmbAbI48s7TDIkjJexwMZWvVdGWpUKg9miImCgmrQo5oNMNA/pub?gid=0&single=true&output=csv',
+      DEFAULT_CENTER: [24.1512, 120.6815], // 預設地圖中心點 (台中市北區)
+      DEFAULT_ZOOM: 13
+    };
+
+    // 內建測試用範例資料 (未設定 CSV_URL 時啟用)
+    const DEMO_DATA = [
+      {
+        '地區': '台中市北區',
+        '名稱': '一中街濃厚豚骨拉麵',
+        '類型': '日式料理',
+        '餐廳分類': '正餐',
+        '評分': '4.6',
+        '經緯度': '24.1502, 120.6848',
+        '地圖連結': '',
+        '備註': '叉燒厚實、可免費加麵一次，尖峰時段需排隊'
+      },
+      {
+        '地區': '台中市北區',
+        '名稱': '科博館旁手沖咖啡館',
+        '類型': '咖啡甜點',
+        '餐廳分類': '咖啡廳',
+        '評分': '4.8',
+        '經緯度': '24.1568, 120.6659',
+        '地圖連結': '',
+        '備註': '巴斯克乳酪蛋糕必點，插座多適合筆電工作'
+      },
+      {
+        '地區': '台中市西區',
+        '名稱': '勤美綠園道義式小館',
+        '類型': '義式料理',
+        '餐廳分類': '聚餐',
+        '評分': '4.3',
+        '經緯度': '24.1510, 120.6632',
+        '地圖連結': '',
+        '備註': '松露野菇燉飯香氣足，建議提前訂位'
+      },
+      {
+        '地區': '台中市南屯區',
+        '名稱': '公益路炭火燒肉專門店',
+        '類型': '燒肉火鍋',
+        '餐廳分類': '聚餐',
+        '評分': '4.7',
+        '經緯度': '24.1506, 120.6485',
+        '地圖連結': '',
+        '備註': '專人代烤服務好，附免費雞湯可續壺'
+      },
+      {
+        '地區': '台中市北區',
+        '名稱': '中國醫周邊傳統肉燥飯',
+        '類型': '台式小吃',
+        '餐廳分類': '小吃',
+        '評分': '4.2',
+        '經緯度': '24.1575, 120.6802',
+        '地圖連結': '',
+        '備註': '半熟荷包蛋配肉燥飯、綜合湯料多實在'
+      }
+    ];
+
+    // 全域狀態管理
+    let allRestaurants = [];
+    let filteredRestaurants = [];
+    let map = null;
+    let markerLayer = null;
+    let markersById = {};
+    let activeId = null;
+
+    // 初始化 Leaflet 地圖
+    function initMap() {
+      map = L.map('map').setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+    }
+
+    // 解析經緯度 (支援單欄 "lat, lng" 或雙欄 "緯度" / "經度")
+    function parseCoordinates(row) {
+      let lat = NaN;
+      let lng = NaN;
+
+      if (row['經緯度']) {
+        const parts = String(row['經緯度']).split(/[,，\s]+/).filter(Boolean);
+        if (parts.length >= 2) {
+          lat = parseFloat(parts[0]);
+          lng = parseFloat(parts[1]);
+        }
+      } else if (row['緯度'] && row['經度']) {
+        lat = parseFloat(row['緯度']);
+        lng = parseFloat(row['經度']);
+      }
+
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng };
+      }
+      return null;
+    }
+
+    // 取得或組合 Google Maps 導航網址
+    function buildMapUrl(row) {
+      const rawUrl = (row['地圖連結'] || '').trim();
+      if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+        return rawUrl;
+      }
+      const query = encodeURIComponent(`${row['名稱'] || ''} ${row['地區'] || ''}`.trim());
+      return `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }
+
+    // 防止 XSS 的 HTML 跳脫函式
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text == null ? '' : String(text);
+      return div.innerHTML;
+    }
+
+    // 載入資料 (Google 試算表 CSV 或內建範例)
+    async function loadData(forceRefresh = false) {
+      const statusEl = document.getElementById('dataSourceStatus');
+      statusEl.textContent = '資料讀取中...';
+
+      if (!CONFIG.SHEET_CSV_URL) {
+        processRawRows(DEMO_DATA);
+        statusEl.textContent = `目前為展示模式（共 ${allRestaurants.length} 筆範例，請於程式碼設定 CSV 網址）`;
+        return;
+      }
+
+      try {
+        // 加上時間戳記避免瀏覽器本地快取
+        const separator = CONFIG.SHEET_CSV_URL.includes('?') ? '&' : '?';
+        const url = forceRefresh ? `${CONFIG.SHEET_CSV_URL}${separator}_t=${Date.now()}` : CONFIG.SHEET_CSV_URL;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP 錯誤碼: ${response.status}`);
+        const csvText = await response.text();
+
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            processRawRows(results.data);
+            statusEl.textContent = `已同步 Google 試算表（共 ${allRestaurants.length} 筆資料）`;
+          },
+          error: function(err) {
+            throw err;
+          }
+        });
+      } catch (error) {
+        console.error('載入失敗:', error);
+        statusEl.textContent = '試算表讀取失敗，請確認「發布到網路 (CSV)」權限設定';
+      }
+    }
+
+    // 標準化資料結構
+    function processRawRows(rows) {
+      allRestaurants = rows
+        .filter(r => r['名稱'] && String(r['名稱']).trim() !== '')
+        .map((r, index) => {
+          const coords = parseCoordinates(r);
+          const ratingNum = parseFloat(r['評分']);
+          return {
+            id: `rest_${index}`,
+            region: (r['地區'] || '未分類地區').trim(),
+            name: (r['名稱'] || '').trim(),
+            type: (r['類型'] || '未分類類型').trim(),
+            category: (r['餐廳分類'] || '未分類').trim(),
+            rating: !isNaN(ratingNum) ? ratingNum : null,
+            coords: coords,
+            mapUrl: buildMapUrl(r),
+            note: (r['備註'] || '').trim()
+          };
+        });
+
+      populateFilterOptions();
+      applyFilters();
+    }
+
+    // 動態填入下拉篩選選單
+    function populateFilterOptions() {
+      const fillSelect = (selectId, values, defaultLabel) => {
+        const select = document.getElementById(selectId);
+        const currentVal = select.value;
+        const uniqueSorted = [...new Set(values)].filter(Boolean).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+        select.innerHTML = `<option value="">${defaultLabel}</option>` +
+          uniqueSorted.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+        if (uniqueSorted.includes(currentVal)) {
+          select.value = currentVal;
+        }
+      };
+
+      fillSelect('regionFilter', allRestaurants.map(r => r.region), '所有地區');
+      fillSelect('typeFilter', allRestaurants.map(r => r.type), '所有類型');
+      fillSelect('categoryFilter', allRestaurants.map(r => r.category), '所有分類');
+    }
+
+    // 執行多條件篩選與排序
+    function applyFilters() {
+      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+      const region = document.getElementById('regionFilter').value;
+      const type = document.getElementById('typeFilter').value;
+      const category = document.getElementById('categoryFilter').value;
+      const minRating = parseFloat(document.getElementById('ratingFilter').value) || 0;
+      const sortBy = document.getElementById('sortSelect').value;
+
+      filteredRestaurants = allRestaurants.filter(item => {
+        if (region && item.region !== region) return false;
+        if (type && item.type !== type) return false;
+        if (category && item.category !== category) return false;
+        if (minRating > 0 && (item.rating === null || item.rating < minRating)) return false;
+        if (keyword) {
+          const searchTarget = `${item.name} ${item.region} ${item.type} ${item.category} ${item.note}`.toLowerCase();
+          if (!searchTarget.includes(keyword)) return false;
+        }
+        return true;
+      });
+
+      if (sortBy === 'ratingDesc') {
+        filteredRestaurants.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      } else if (sortBy === 'ratingAsc') {
+        filteredRestaurants.sort((a, b) => (a.rating || 0) - (b.rating || 0));
+      }
+
+      document.getElementById('resultCount').textContent = filteredRestaurants.length;
+      renderList();
+      renderMapMarkers();
+    }
+
+    // 渲染左側餐廳卡片清單
+    function renderList() {
+      const listContainer = document.getElementById('restaurantList');
+
+      if (filteredRestaurants.length === 0) {
+        listContainer.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-sm font-medium">找不到符合條件的餐廳</p>
+            <p class="text-xs mt-1">請嘗試放寬篩選條件或清除關鍵字</p>
+          </div>
+        `;
+        return;
+      }
+
+      listContainer.innerHTML = filteredRestaurants.map(item => {
+        const isSelected = item.id === activeId;
+        const borderClass = isSelected ? 'ring-2 ring-amber-500 border-amber-500 bg-amber-50/30' : 'border-slate-200 bg-white hover:border-amber-300';
+        const ratingBadge = item.rating !== null
+          ? `<span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">${item.rating.toFixed(1)} 分</span>`
+          : `<span class="text-xs text-slate-400">尚無評分</span>`;
+        const noCoordTag = !item.coords
+          ? `<span class="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">無座標</span>`
+          : '';
+
+        return `
+          <article id="card_${item.id}" onclick="focusRestaurant('${item.id}')" class="border ${borderClass} rounded-xl p-4 shadow-sm transition cursor-pointer">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h2 class="font-bold text-slate-900 text-base">${escapeHtml(item.name)}</h2>
+                  ${noCoordTag}
+                </div>
+                <p class="text-xs text-slate-500 mt-0.5">${escapeHtml(item.region)}</p>
+              </div>
+              <div class="shrink-0">${ratingBadge}</div>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5 mt-2.5">
+              <span class="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded">${escapeHtml(item.type)}</span>
+              <span class="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded">${escapeHtml(item.category)}</span>
+            </div>
+
+            ${item.note ? `<p class="text-xs text-slate-600 mt-2.5 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">${escapeHtml(item.note)}</p>` : ''}
+
+            <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+              <span class="text-xs text-slate-400">${item.coords ? '點擊定位地圖' : '僅提供外部導航'}</span>
+              <a href="${escapeHtml(item.mapUrl)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
+                開啟 Google 導航
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    // 渲染地圖圖釘並自動縮放視野
+    function renderMapMarkers() {
+      markerLayer.clearLayers();
+      markersById = {};
+      const validCoords = [];
+
+      filteredRestaurants.forEach(item => {
+        if (!item.coords) return;
+
+        const { lat, lng } = item.coords;
+        validCoords.push([lat, lng]);
+
+        const popupHtml = `
+          <div class="min-w-[180px]">
+            <div class="font-bold text-slate-900 text-sm">${escapeHtml(item.name)}</div>
+            <div class="text-xs text-slate-500 mt-0.5">${escapeHtml(item.region)} · ${escapeHtml(item.type)} (${escapeHtml(item.category)})</div>
+            ${item.rating !== null ? `<div class="text-xs font-semibold text-amber-600 mt-1">評分：${item.rating.toFixed(1)} 分</div>` : ''}
+            ${item.note ? `<div class="text-xs text-slate-600 mt-1.5 border-t border-slate-100 pt-1">${escapeHtml(item.note)}</div>` : ''}
+            <a href="${escapeHtml(item.mapUrl)}" target="_blank" rel="noopener noreferrer" class="mt-2 inline-block w-full text-center bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium py-1.5 px-3 rounded-md">
+              Google Maps 導航
+            </a>
+          </div>
+        `;
+
+        const marker = L.marker([lat, lng]).bindPopup(popupHtml);
+        marker.on('click', () => {
+          highlightCardOnly(item.id);
+        });
+
+        marker.addTo(markerLayer);
+        markersById[item.id] = marker;
+      });
+
+      if (validCoords.length > 0) {
+        const bounds = L.latLngBounds(validCoords);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      }
+    }
+
+    // 點擊卡片時，地圖飛行定位並開啟彈窗
+    function focusRestaurant(id) {
+      highlightCardOnly(id);
+      const item = filteredRestaurants.find(r => r.id === id);
+      if (item && item.coords && markersById[id]) {
+        map.flyTo([item.coords.lat, item.coords.lng], 16, { duration: 0.8 });
+        markersById[id].openPopup();
+      }
+    }
+
+    // 高亮選中的卡片並捲動至可視範圍
+    function highlightCardOnly(id) {
+      activeId = id;
+      renderList();
+      const cardEl = document.getElementById(`card_${id}`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    // 隨機抽籤功能 (從目前篩選結果中抽取)
+    function pickRandomRestaurant() {
+      if (filteredRestaurants.length === 0) {
+        alert('目前篩選條件下沒有可抽取的餐廳，請放寬條件再試一次。');
+        return;
+      }
+      const randomIndex = Math.floor(Math.random() * filteredRestaurants.length);
+      const chosen = filteredRestaurants[randomIndex];
+
+      focusRestaurant(chosen.id);
+
+      const modal = document.getElementById('randomModal');
+      const content = document.getElementById('randomModalContent');
+      content.innerHTML = `
+        <h3 class="text-xl font-bold text-slate-900">${escapeHtml(chosen.name)}</h3>
+        <p class="text-sm text-slate-500 mt-1">${escapeHtml(chosen.region)} · ${escapeHtml(chosen.type)} · ${escapeHtml(chosen.category)}</p>
+        ${chosen.rating !== null ? `<p class="text-sm font-semibold text-amber-600 mt-2">評分：${chosen.rating.toFixed(1)} 分</p>` : ''}
+        ${chosen.note ? `<p class="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg mt-3 border border-slate-100">${escapeHtml(chosen.note)}</p>` : ''}
+        <div class="mt-5 flex gap-2">
+          <a href="${escapeHtml(chosen.mapUrl)}" target="_blank" rel="noopener noreferrer" class="flex-1 text-center bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold py-2.5 rounded-lg transition">
+            立即開啟導航
+          </a>
+          <button type="button" onclick="pickRandomRestaurant()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition cursor-pointer">
+            重抽
+          </button>
+        </div>
+      `;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    // 綁定事件監聽器
+    document.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      loadData();
+
+      ['searchInput', 'regionFilter', 'typeFilter', 'categoryFilter', 'ratingFilter', 'sortSelect'].forEach(id => {
+        const eventType = id === 'searchInput' ? 'input' : 'change';
+        document.getElementById(id).addEventListener(eventType, applyFilters);
+      });
+
+      document.getElementById('resetFilterBtn').addEventListener('click', () => {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('regionFilter').value = '';
+        document.getElementById('typeFilter').value = '';
+        document.getElementById('categoryFilter').value = '';
+        document.getElementById('ratingFilter').value = '0';
+        document.getElementById('sortSelect').value = 'default';
+        activeId = null;
+        applyFilters();
+      });
+
+      document.getElementById('reloadBtn').addEventListener('click', () => loadData(true));
+      document.getElementById('randomPickBtn').addEventListener('click', pickRandomRestaurant);
+      document.getElementById('closeModalBtn').addEventListener('click', () => {
+        const modal = document.getElementById('randomModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      });
+    });
+  </script>
+</body>
+</html>
